@@ -1,4 +1,3 @@
-// GameStageWidget.h
 #pragma once
 
 #include <QWidget>
@@ -7,15 +6,21 @@
 #include <QGridLayout>
 #include <QVector>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
+#include "Character.h"
+#include "Enemy.h"
 
 /*
  * GameStageWidget
- *  - 大小由 MainWindow 設定為 540×960
- *  - 提供 setter 接收從 Prepare 階段傳來的 selectedChars 與 missionID
- *  - initGame() 中根據這些參數初始化三波邏輯、符石棋盤、玩家區顯示
+ *  - 寬 540 × 高 960
+ *  - 上方 540×410 是敵人區
+ *  - 中間 540×100 是玩家區 (固定 6 個槽位)
+ *  - 下方 540×450 是符石區
+ *  - 玩家區每個槽位要麼顯示角色圖，要麼顯示灰底留空
+ *  - ⚙ 設定按鈕用絕對定位固定在右上
  */
 
-class RunestoneWidget; // 簡易符石格子
+class RunestoneWidget;
 
 class GameStageWidget : public QWidget
 {
@@ -24,58 +29,62 @@ class GameStageWidget : public QWidget
 public:
     explicit GameStageWidget(QWidget *parent = nullptr);
 
-    // setter：讓 MainWindow 把 Prepare 階段的參數傳給這裡
+    // 由 MainWindow 傳入：長度為 6 的向量，空位用 0 表示
     void setSelectedCharacters(const QVector<int> &chars);
     void setMissionID(int mission);
 
-    // 初始化遊戲；呼叫前一定要先呼叫上面兩個 setter
+    // 初始化遊戲：建立角色 & 敵人，並顯示
     void initGame();
-
-    // 重置遊戲：把動態資料都清空
+    // 重置：刪掉舊的角色、敵人、waves
     void resetGame();
 
-    // 暫停／恢復 遊戲
     void pauseGame();
     void resumeGame();
 
 signals:
-    // 遊戲結束 (true=玩家勝利, false=玩家失敗)
     void gameOver(bool playerWon);
-
-    // 請求暫停
     void pauseRequested();
 
 private slots:
-    // Slot：點 ⚙ (設定) 按鈕
     void onSettingClicked();
-
-    // Slot：測試用「模擬勝利」按鈕
     void onFakeWinButtonClicked();
-
-    // Slot：測試用「模擬失敗」按鈕
     void onFakeLoseButtonClicked();
+    void onNextBattleClicked();
 
 private:
-    // 初始化 UI 版面 (敵人區 / 玩家區 / 符石區)
     void setupUI();
+    void loadCurrentWave();
 
-    QWidget                   *enemyArea;     // 敵人區 (高度 410px)
-    QWidget                   *playerArea;    // 玩家區 (高度 100px)
-    QWidget                   *runestoneArea; // 符石區 (高度 450px)
-    QGridLayout               *gemLayout;
-    QVector<RunestoneWidget*>   gems;          // 30 個符石格子
+    // ===== UI Components =====
+    QWidget              *enemyArea;        // 敵人區 (540×410)
+    QWidget              *playerArea;       // 玩家區 (540×100)
+    QWidget              *runestoneArea;    // 符石區 (540×450)
 
-    // 玩家區的水平 Layout，用來放角色圖示 + ⚙ 按鈕
-    QHBoxLayout               *charLayout;
+    // 符石區
+    QGridLayout          *gemLayout;
+    QVector<RunestoneWidget*> gems;
 
-    QPushButton               *settingButton;
-    QPushButton               *fakeWinBtn;
-    QPushButton               *fakeLoseBtn;
+    // 玩家區：水平排列 6 個槽
+    QHBoxLayout          *charLayout;
 
-    bool isPaused;
+    // 敵人區：waveLayout + 按鈕
+    QVBoxLayout          *enemyLayout;
+    QHBoxLayout          *waveLayout;
 
-    // ---------- 新增的成員變數 ----------
-    QVector<int> selectedChars; // 從 Prepare 階段傳來的角色 ID 列表
-    int missionID;              // 從 Prepare 階段傳來的關卡 ID
-    // -----------------------------------
+    // 按鈕
+    QPushButton          *nextBattleButton;
+    QPushButton          *fakeWinBtn;
+    QPushButton          *fakeLoseBtn;
+    QPushButton          *settingButton;   // 絕對定位在右上
+
+    bool                  isPaused;
+
+    // ===== 遊戲邏輯資料 =====
+    QVector<int>          selectedChars;   // 一定長度 6，0 = 空位
+    int                   missionID;
+    QVector<Character*>   playerChars;     // 會儲存新建的 Character* (如果 slot = 0 就不 new)
+
+    QVector<QVector<Enemy*>> waves;        // 三波敵人
+    int                     currentWaveIndex;
+    QVector<Enemy*>         enemies;       // 當前波的 Enemy*
 };

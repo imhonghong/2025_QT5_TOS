@@ -1,11 +1,13 @@
-// PrepareStageWidget.cpp
 #include "PrepareStageWidget.h"
 #include <QMessageBox>
+#include <QIcon>
+#include <QSize>
+#include <QFont>
 
 PrepareStageWidget::PrepareStageWidget(QWidget *parent)
     : QWidget(parent)
 {
-    // 這裡不需再呼叫 setFixedSize，MainWindow 已經替此 Widget 設定為 540×960
+    // MainWindow 會替本 Widget 設定固定大小 540×960，所以這裡不需再呼叫 setFixedSize
 
     auto mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(20, 20, 20, 20);
@@ -21,37 +23,29 @@ PrepareStageWidget::PrepareStageWidget(QWidget *parent)
 
     //----------------------------------------
     // (2) 六個 QComboBox 並排，用於選角色
-    //    - 第一項為空（表示此槽位不選人物）
+    //    - 第一項為空（表示此槽位不選人物，回傳 0）
     //    - 後面 1~5 為角色 ID，同時配合 Icon 圖示顯示
     QHBoxLayout *hLayoutChars = new QHBoxLayout;
     hLayoutChars->setSpacing(8);
 
-    // List 內先放空白，然後把 ID 1~5 加入
-    // Icon 路徑請自行修改成實際放置的檔案
-    QStringList charList;
-    charList << "";  // index 0: 空白
-    for (int id = 1; id <= 5; ++id) {
-        charList << QString::number(id);
-    }
-
+    // 準備角色清單 (index 0 = 空白)
     for (int i = 0; i < 6; ++i) {
         comboChars[i] = new QComboBox(this);
-        // 設定大小：寬 70、高 70，圖示和文字都置中
         comboChars[i]->setFixedSize(70, 70);
-        comboChars[i]->setIconSize(QSize(48, 48)); // 圖示大小大約 48x48
+        comboChars[i]->setIconSize(QSize(48, 48));
 
-        // 第一個選項先放空白
+        // 第一個選項是空白 (代表此槽不選角色)
         comboChars[i]->addItem("");
 
-        // 加入 ID=1~5，帶上對應圖示與文字
-        // 假設角色圖檔在 resource (qrc) 裡面，路徑為 :/characters/char1.png, char2.png, ...
+        // 後面 1~5 為角色 ID，同時顯示圖示
         for (int id = 1; id <= 5; ++id) {
             QString text = QString::number(id);
+            // 注意：請把下面這條路徑改成你真正放置角色圖示的 qrc 路徑
             QString iconPath = QString(":/character/dataset/character/ID%1.png").arg(id);
             comboChars[i]->addItem(QIcon(iconPath), text);
         }
 
-        comboChars[i]->setCurrentIndex(0); // 預設為空白
+        comboChars[i]->setCurrentIndex(0); // 預設空白
         hLayoutChars->addWidget(comboChars[i]);
     }
     mainLayout->addLayout(hLayoutChars);
@@ -71,10 +65,10 @@ PrepareStageWidget::PrepareStageWidget(QWidget *parent)
     //----------------------------------------
     // (5) QSpinBox 作為 mission 輸入，可以用鍵盤直接輸入數字
     spinMission = new QSpinBox(this);
-    spinMission->setRange(1, 10);  // 範例：未來若要做 bonus 可擴增到 10 關
+    spinMission->setRange(1, 10);  // 範例只給 1~10
     spinMission->setValue(1);      // 預設為 1
     spinMission->setFixedSize(100, 40);
-    spinMission->setKeyboardTracking(false); // 用戶輸入後才觸發 valueChanged()
+    spinMission->setKeyboardTracking(false);
     spinMission->setFrame(true);
     mainLayout->addWidget(spinMission, 0, Qt::AlignLeft);
 
@@ -98,27 +92,39 @@ PrepareStageWidget::PrepareStageWidget(QWidget *parent)
 
 void PrepareStageWidget::onStartButtonClicked()
 {
-    QVector<int> selectedChars;
+    // (1) 先建一個長度 6、初始值全為 0 的向量
+    QVector<int> padded(6, 0);
 
-    // 把六個下拉式選單中所有 index > 0 (非空白) 的角色 ID 加進 QVector
+    // (2) 把每個 comboChars[i] 的選項轉成對應 ID (0~5)
+    //     index = comboChars[i]->currentIndex()
+    //     如果 index == 0 → 空白 → padded[i] = 0
+    //     如果 index > 0 → 代表角色 ID = itemText(index).toInt()
     for (int i = 0; i < 6; ++i) {
         int idx = comboChars[i]->currentIndex();
         if (idx > 0) {
-            // comboChars[i]->itemText(idx) = "1"~"5"
+            // itemText(idx) = "1"~"5"
             int charID = comboChars[i]->itemText(idx).toInt();
-            selectedChars.append(charID);
+            padded[i] = charID;
         }
+        // 若 idx == 0，padded[i] 保持為 0 (空位)
     }
 
-    // 至少要選一個角色才行
-    if (selectedChars.isEmpty()) {
+    // (3) 檢查：至少要選一個角色 (也就是 padded 中必須有一個 > 0)
+    bool anySelected = false;
+    for (int v : padded) {
+        if (v > 0) {
+            anySelected = true;
+            break;
+        }
+    }
+    if (!anySelected) {
         QMessageBox::warning(this, "Warning", "請至少選擇一個角色！");
         return;
     }
 
-    // 取得 missionID
+    // (4) 取得 missionID
     int missionID = spinMission->value();
 
-    // 發送信號，帶選到的角色列表和 missionID
-    emit startClicked(selectedChars, missionID);
+    // (5) 發射信號：帶出長度 6、空位以 0 表示的 selectedChars
+    emit startClicked(padded, missionID);
 }
