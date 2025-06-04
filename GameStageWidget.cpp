@@ -1,437 +1,332 @@
+// GameStageWidget.cpp
 #include "GameStageWidget.h"
+#include "GameController.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QLabel>
-#include <QPixmap>
+#include <QTimer>
 #include <QDebug>
-
-// ------------------------------------------------------------------
-// RunestoneWidget：簡易符石格子占位
-class RunestoneWidget : public QLabel {
-public:
-    explicit RunestoneWidget(QWidget *parent = nullptr)
-        : QLabel(parent)
-    {
-        setFixedSize(90, 90);
-        setStyleSheet("background-color: lightGray; border: 1px solid gray;");
-        setAlignment(Qt::AlignCenter);
-        setText("Gem");
-    }
-};
-// ------------------------------------------------------------------
 
 GameStageWidget::GameStageWidget(QWidget *parent)
     : QWidget(parent),
-      enemyArea(new QWidget(this)),
-      playerArea(new QWidget(this)),
-      runestoneArea(new QWidget(this)),
-      gemLayout(new QGridLayout(runestoneArea)),
-      charLayout(nullptr),
-      enemyLayout(nullptr),
-      waveLayout(nullptr),
-      nextBattleButton(new QPushButton("通過該 Battle", this)),
-      fakeWinBtn(new QPushButton("模擬勝利", this)),
-      fakeLoseBtn(new QPushButton("模擬失敗", this)),
-      settingButton(new QPushButton("⚙", this)),
-      isPaused(false),
-      missionID(1),
-      currentWaveIndex(0)
+      missionID(0),
+      isPaused(false)
 {
-    // 設定總大小
-    setFixedSize(540, 960);
-
-    // 建立 UI (敵人區、玩家區、符石區)
     setupUI();
-
-    // ⚙ 按鈕用絕對座標擺在 GameStageWidget 右上 (x: 540-30-10, y: 10)
-    settingButton->setFixedSize(30, 30);
-    const int margin = 10;
-    settingButton->move(width() - settingButton->width() - margin,
-                        margin);
-    settingButton->raise();
-
-    // 連接按鈕
-    connect(settingButton, &QPushButton::clicked,
-            this, &GameStageWidget::onSettingClicked);
-    connect(fakeWinBtn, &QPushButton::clicked,
-            this, &GameStageWidget::onFakeWinButtonClicked);
-    connect(fakeLoseBtn, &QPushButton::clicked,
-            this, &GameStageWidget::onFakeLoseButtonClicked);
-    connect(nextBattleButton, &QPushButton::clicked,
-            this, &GameStageWidget::onNextBattleClicked);
 }
 
-void GameStageWidget::setupUI()
-{
-    auto mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
-
-    // ===== 1. 敵人區 (540×410) =====
-    enemyArea->setFixedSize(540, 410);
-    enemyLayout = new QVBoxLayout(enemyArea);
-    enemyLayout->setContentsMargins(0, 0, 0, 0);
-    enemyLayout->setSpacing(5);
-
-    // (a) waveLayout (放敵人圖示)
-    waveLayout = new QHBoxLayout;
-    waveLayout->setContentsMargins(10, 10, 10, 10);
-    waveLayout->setSpacing(20);
-    enemyLayout->addLayout(waveLayout);
-
-    // (b) 模擬「勝利/失敗」按鈕
-    auto btnLayout = new QHBoxLayout;
-    btnLayout->addStretch();
-    fakeWinBtn->setFixedSize(100, 40);
-    fakeLoseBtn->setFixedSize(100, 40);
-    btnLayout->addWidget(fakeWinBtn);
-    btnLayout->addSpacing(10);
-    btnLayout->addWidget(fakeLoseBtn);
-    btnLayout->addStretch();
-    enemyLayout->addLayout(btnLayout);
-
-    // (c) 通過該 Battle 按鈕 (初始隱藏)
-    nextBattleButton->setFixedSize(200, 50);
-    nextBattleButton->setVisible(false);
-    enemyLayout->addWidget(nextBattleButton, 0, Qt::AlignHCenter);
-
-    mainLayout->addWidget(enemyArea);
-
-    // ===== 2. 玩家區 (540×100) =====
-    playerArea->setFixedSize(540, 100);
-    {
-        // charLayout 只放 6 個槽 (角色或空)
-        charLayout = new QHBoxLayout;
-        charLayout->setContentsMargins(10, 5, 10, 5);
-        charLayout->setSpacing(10);
-
-        // 一開始放一個 placeholder，initGame() 進入時會整組清掉
-        QLabel *placeholder = new QLabel("玩家區 (放置角色圖示)", playerArea);
-        placeholder->setAlignment(Qt::AlignCenter);
-        QFont f; f.setPointSize(16);
-        placeholder->setFont(f);
-        placeholder->setStyleSheet("background-color: #EFEFEF;");
-        placeholder->setFixedSize(500, 80);
-        charLayout->addWidget(placeholder);
-
-        // **不再把 settingButton 放到 charLayout** (改絕對定位)
-
-        auto playerOuter = new QHBoxLayout(playerArea);
-        playerOuter->setContentsMargins(0, 0, 0, 0);
-        playerOuter->addLayout(charLayout);
-    }
-    mainLayout->addWidget(playerArea);
-
-    // ===== 3. 符石區 (540×450) =====
-    runestoneArea->setFixedSize(540, 450);
-    runestoneArea->setStyleSheet("background-color: #000000;");
-    {
-        gemLayout->setContentsMargins(0, 0, 0, 0);
-        gemLayout->setSpacing(0);
-        for (int r = 0; r < 5; ++r) {
-            for (int c = 0; c < 6; ++c) {
-                RunestoneWidget *w = new RunestoneWidget(runestoneArea);
-                gems.append(w);
-                gemLayout->addWidget(w, r, c);
-            }
-        }
-    }
-    mainLayout->addWidget(runestoneArea);
-}
-
+////////////////////////////////////////////////////////////////////////////////
+// setSelectedCharacters(): 從 Prepare 階段拿到 6 個角色 ID (0 表示空格)
+////////////////////////////////////////////////////////////////////////////////
 void GameStageWidget::setSelectedCharacters(const QVector<int> &chars)
 {
-    // 要確保傳進來的 chars 長度恰好是 6
     selectedChars = chars;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// setMissionID(): 從 Prepare 階段拿到 missionID
+////////////////////////////////////////////////////////////////////////////////
 void GameStageWidget::setMissionID(int mission)
 {
     missionID = mission;
 }
 
-void GameStageWidget::initGame()
-{
-    // (1) 重置遊戲：清除角色、敵人、waves
-    resetGame();
-
-    // (2) 建立玩家區 6 個槽：從 selectedChars[0..5] 取值
-    int totalHP  = 2000;
-    int numChars = 0;
-    for (int id : selectedChars) {
-        if (id != 0) numChars++;
-    }
-
-    // 先把 charLayout 裡的舊 widget (placeholder 或舊角色) 全刪掉
-    {
-        QLayoutItem *child;
-        while ((child = charLayout->takeAt(0)) != nullptr) {
-            if (QWidget *w = child->widget()) {
-                w->deleteLater();
-            }
-            delete child;
-        }
-    }
-
-    // i 從 0 到 5，對應第 1~6 個槽
-    for (int i = 0; i < 6; ++i) {
-        int id = selectedChars.value(i, 0);
-        if (id > 0) {
-            // 這格有角色 ID → new Character 並顯示圖示
-            Character::Attribute attr = Character::Water;
-            switch (id) {
-                case 1: attr = Character::Water; break;
-                case 2: attr = Character::Fire;  break;
-                case 3: attr = Character::Earth; break;
-                case 4: attr = Character::Light; break;
-                case 5: attr = Character::Dark;  break;
-                case 6: attr = Character::Water; break; // 假設最多 6
-                default: attr = Character::Water; break;
-            }
-            QString iconPath = QString(":/character/dataset/character/ID%1.png").arg(id);
-            Character *c = new Character(id, attr, totalHP, numChars, iconPath);
-            playerChars.append(c);
-
-            QLabel *charLabel = new QLabel(playerArea);
-            charLabel->setFixedSize(80, 80);
-            charLabel->setPixmap(
-                QPixmap(c->getIconPath())
-                    .scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation)
-            );
-            charLabel->setToolTip(QString("角色 %1").arg(id));
-            charLayout->addWidget(charLabel);
-
-        } else {
-            // 這格是空 (id==0) → 顯示灰底空白格
-            QLabel *emptyLabel = new QLabel(playerArea);
-            emptyLabel->setFixedSize(80, 80);
-            emptyLabel->setStyleSheet("background-color: #CCCCCC;");
-            emptyLabel->setToolTip("空位");
-            charLayout->addWidget(emptyLabel);
-        }
-    }
-
-    // (3) 準備三波敵人 (硬編示範)
-    QVector<Enemy*> wave1;
-    {
-        wave1.append(new Enemy(101, Character::Water, 100,
-                               ":/enemy/dataset/enemy/100n.png", 3));
-        wave1.append(new Enemy(102, Character::Fire,  100,
-                               ":/enemy/dataset/enemy/96n.png", 3));
-        wave1.append(new Enemy(103, Character::Earth, 100,
-                               ":/enemy/dataset/enemy/98n.png", 3));
-    }
-    QVector<Enemy*> wave2;
-    {
-        wave2.append(new Enemy(201, Character::Light, 100,
-                               ":/enemy/dataset/enemy/102n.png", 3));
-        wave2.append(new Enemy(202, Character::Earth, 300,
-                               ":/enemy/dataset/enemy/267n.png", 3));
-        wave2.append(new Enemy(203, Character::Dark,  100,
-                               ":/enemy/dataset/enemy/104n.png", 3));
-    }
-    QVector<Enemy*> wave3;
-    {
-        wave3.append(new Enemy(301, Character::Fire, 700,
-                               ":/enemy/dataset/enemy/180n.png", 5));
-    }
-    waves.append(wave1);
-    waves.append(wave2);
-    waves.append(wave3);
-
-    // (4) 載入第 1 波
-    currentWaveIndex = 0;
-    loadCurrentWave();
-
-    isPaused = false;
-}
-
+////////////////////////////////////////////////////////////////////////////////
+// resetGame(): 清空所有區塊、重置角色區為 6 個灰底空格
+//    由 MainWindow 在每次切回遊戲畫面、或重新開始遊戲時呼叫
+////////////////////////////////////////////////////////////////////////////////
 void GameStageWidget::resetGame()
 {
-    qDebug() << "[resetGame] ----- Starting clean reset of GameStage -----";
-
-    // 1. Unpause the game
-    isPaused = false;
-    qDebug() << "[resetGame] isPaused set to false";
-
-    // 2. Clear out the player area (charLayout) and delete all Character* in playerChars
-    qDebug() << "[resetGame] Clearing player area (charLayout)...";
-    {
-        QLayoutItem *child = nullptr;
-        while ((child = charLayout->takeAt(0)) != nullptr) {
-            if (QWidget *w = child->widget()) {
-                qDebug() << "[resetGame]   Deleting player QLabel (pointer):" << w;
-                w->deleteLater();
-            }
-            delete child;
-        }
-        qDebug() << "[resetGame] charLayout items cleared";
-    }
-
-    if (!playerChars.isEmpty()) {
-        qDebug() << "[resetGame] Deleting" << playerChars.size() << "Character* in playerChars...";
-        for (Character *c : playerChars) {
-            if (c) {
-                qDebug() << "[resetGame]   Deleting Character* (pointer):" << c;
-                delete c;
-            } else {
-                qDebug() << "[resetGame]   Skipping nullptr Character*";
-            }
-        }
-        playerChars.clear();
-        qDebug() << "[resetGame] playerChars cleared";
-    } else {
-        qDebug() << "[resetGame] playerChars already empty";
-    }
-
-    // 3. We assume loadCurrentWave() has already deleted any Enemy* from previous waves.
-    //    So here we only clear the vectors without deleting pointers again.
-    if (!enemies.isEmpty()) {
-        qDebug() << "[resetGame] Clearing enemies vector without deleting pointers (already freed by loadCurrentWave)";
-        enemies.clear();
-        qDebug() << "[resetGame] enemies cleared";
-    } else {
-        qDebug() << "[resetGame] enemies already empty";
-    }
-
-    if (!waves.isEmpty()) {
-        qDebug() << "[resetGame] Clearing waves vector without deleting pointers (already freed by loadCurrentWave)";
-        waves.clear();
-        qDebug() << "[resetGame] waves cleared";
-    } else {
-        qDebug() << "[resetGame] waves already empty";
-    }
-
-    // 4. Clear out waveLayout (remove any leftover QLabel for enemies)
-    qDebug() << "[resetGame] Clearing waveLayout widgets...";
-    {
-        QLayoutItem *child = nullptr;
-        while ((child = waveLayout->takeAt(0)) != nullptr) {
-            if (QWidget *w = child->widget()) {
-                qDebug() << "[resetGame]   Deleting waveLayout QLabel (pointer):" << w;
-                w->deleteLater();
-            }
-            delete child;
-        }
-        qDebug() << "[resetGame] waveLayout items cleared";
-    }
-
-    // 5. Hide any battle‐related buttons to avoid leftover UI elements
-    if (nextBattleButton) {
-        qDebug() << "[resetGame] Hiding nextBattleButton";
-        nextBattleButton->setVisible(false);
-    }
-    if (fakeWinBtn) {
-        qDebug() << "[resetGame] Hiding fakeWinBtn";
-        fakeWinBtn->setVisible(false);
-    }
-    if (fakeLoseBtn) {
-        qDebug() << "[resetGame] Hiding fakeLoseBtn";
-        fakeLoseBtn->setVisible(false);
-    }
-/*
-    // 6. Stop any active timers (e.g., fallTimer, swapTimer) to prevent callbacks to deleted widgets
-    if (fallTimer && fallTimer->isActive()) {
-        qDebug() << "[resetGame] Stopping fallTimer";
-        fallTimer->stop();
-    }
-    if (swapTimer && swapTimer->isActive()) {
-        qDebug() << "[resetGame] Stopping swapTimer";
-        swapTimer->stop();
-    }
-*/
-    // 7. Reset wave index so next game starts from wave 0
-    qDebug() << "[resetGame] Resetting currentWaveIndex from" << currentWaveIndex << "to 0";
-    currentWaveIndex = 0;
-
-    qDebug() << "[resetGame] ----- resetGame() complete -----";
-}
-
-void GameStageWidget::loadCurrentWave()
-{
-    // (1) 刪除上一次儲存在 enemies 的物件
-    for (Enemy *e : enemies) {
-        delete e;
-    }
-    enemies.clear();
-
-    // (2) 取得本波 Enemy* 列表
-    enemies = waves[currentWaveIndex];
-
-    // (3) 清空 waveLayout 裡原本的 QLabel
+    // (1) 清空角色區
     {
         QLayoutItem *child;
-        while ((child = waveLayout->takeAt(0)) != nullptr) {
+        while ((child = charLayout->takeAt(0)) != nullptr) {
             if (QWidget *w = child->widget()) {
                 w->deleteLater();
             }
             delete child;
         }
+        charLabels.clear();
     }
 
-    // (4) 依序把本波敵人圖示放入 waveLayout
-    for (Enemy *e : enemies) {
-        QLabel *enemyLabel = new QLabel(enemyArea);
-        enemyLabel->setFixedSize(100, 100);
-        enemyLabel->setPixmap(
-            QPixmap(e->getIconPath())
-                .scaled(100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation)
-        );
-        enemyLabel->setToolTip(
-            QString("Enemy ID:%1  HP:%2  CD:%3")
-                .arg(e->getID())
-                .arg(e->getCurrentHP())
-                .arg(e->getCooldownDefault())
-        );
-        waveLayout->addWidget(enemyLabel);
-    }
+    // (2) 清空敵人區
+    {
+        for (QLabel *lbl : enemyLabels) {
+            if (lbl) lbl->deleteLater();
+        }
+        enemyLabels.clear();
 
-    // (5) 顯示「通過該 Battle」按鈕
-    nextBattleButton->setVisible(true);
-    fakeWinBtn->setVisible(true);
-    fakeLoseBtn->setVisible(true);
-}
-
-void GameStageWidget::onNextBattleClicked()
-{
-    currentWaveIndex++;
-    if (currentWaveIndex >= waves.size()) {
-        emit gameOver(true);
-    } else {
-
-        // 清掉 waveLayout 的 QLabel
-        {
+        QLayout *lyt = enemyArea->layout();
+        if (lyt) {
             QLayoutItem *child;
-            while ((child = waveLayout->takeAt(0)) != nullptr) {
+            while ((child = lyt->takeAt(0)) != nullptr) {
                 if (QWidget *w = child->widget()) {
                     w->deleteLater();
                 }
                 delete child;
             }
         }
-        loadCurrentWave();
+    }
+
+    // (3) 清空符石區
+    clearGemLabels();
+
+    // (4) 重新在角色區放 6 個灰底空格
+    for (int i = 0; i < 6; ++i) {
+        QLabel *lbl = new QLabel(this);
+        lbl->setFixedSize(64, 64);
+        lbl->setStyleSheet("background-color: #555555"); // 灰底
+        charLayout->addWidget(lbl, 0, i);
+        charLabels.append(lbl);
     }
 }
 
-void GameStageWidget::pauseGame()
+////////////////////////////////////////////////////////////////////////////////
+// initGame(): 真正把圖片貼到「角色／敵人／符石」上
+//    必須在 MainWindow::gotoGameStage() 裡，例如：先 resetGame() 再 initGame()
+//    才能把 selectedChars、currentWaveEnemies、board2D 一次畫上去
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::initGame()
 {
-    if (isPaused) return;
-    isPaused = true;
+    // (1) 先清空角色區，再把 selectedChars 裡的每隻 ID→pixmap
+    {
+        QLayoutItem *child;
+        while ((child = charLayout->takeAt(0)) != nullptr) {
+            if (QWidget *w = child->widget()) w->deleteLater();
+            delete child;
+        }
+        charLabels.clear();
+    }
+
+    // 計算有幾隻非零 ID，以便後面計算 HP (純示意，不影響顯示)
+    int totalHP  = 2000;
+    int numChars = 0;
+    for (int id : selectedChars) {
+        if (id > 0) ++numChars;
+    }
+
+    // 依序把 6 格位置顯示成「角色圖」或「灰底」
+    for (int i = 0; i < 6; ++i) {
+        QLabel *lbl = new QLabel(this);
+        lbl->setFixedSize(80, 80);
+
+        int id = selectedChars.value(i, 0);
+        if (id > 0) {
+            // 範例路徑：:/character/dataset/character/ID1.png
+            QString iconPath = QString(":/character/dataset/character/ID%1.png").arg(id);
+            QPixmap pix(iconPath);
+            lbl->setPixmap(pix.scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        }
+        else {
+            // 空格
+            lbl->setStyleSheet("background-color: #555555");
+        }
+
+        charLayout->addWidget(lbl, 0, i);
+        charLabels.append(lbl);
+    }
+
+    // (2) 清空敵人區，後面由 showEnemies() 真正貼圖
+    {
+        for (QLabel *lbl : enemyLabels) {
+            if (lbl) lbl->deleteLater();
+        }
+        enemyLabels.clear();
+
+        QLayout *lyt = enemyArea->layout();
+        if (lyt) {
+            QLayoutItem *child;
+            while ((child = lyt->takeAt(0)) != nullptr) {
+                if (QWidget *w = child->widget()) w->deleteLater();
+                delete child;
+            }
+        }
+    }
+
+    // (3) 清空符石區，後面由 showBoard() 真正貼圖
+    clearGemLabels();
 }
 
-void GameStageWidget::resumeGame()
+////////////////////////////////////////////////////////////////////////////////
+// showEnemies(): 從 Controller 拿到一波 Enemy*，把它們的圖顯示到敵人區
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::showEnemies(const QVector<Enemy*> &enemies)
 {
-    if (!isPaused) return;
-    isPaused = false;
+    // 1. 先把 enemyLayout 裡所有 widget 都清掉
+    QLayoutItem *child;
+    while ((child = enemyLayout->takeAt(0)) != nullptr) {
+        if (QWidget *w = child->widget()) {
+            w->deleteLater();
+        }
+        delete child;
+    }
+    enemyLabels.clear();
+
+    // 2. 若 enemies 為空，直接返回（enemyLayout 保持空白）
+    if (enemies.isEmpty()) {
+        return;
+    }
+
+    // 3. 使用 addStretch() + addWidget() + addStretch()
+    //    讓每隻敵人的 QLabel 在水平方向上自動均勻分佈
+    enemyLayout->addStretch();
+
+    for (Enemy *e : enemies) {
+        if (!e) continue;
+
+        // 取得敵人的圖檔路徑 (getIconPath())
+        QString path = e->getIconPath();
+        QPixmap pix(path);
+
+        // 建立 QLabel，顯示敵人圖
+        QLabel *lbl = new QLabel(enemyArea);
+        lbl->setFixedSize(100, 100);
+        lbl->setPixmap(pix.scaled(lbl->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        lbl->setAlignment(Qt::AlignCenter);
+
+        enemyLayout->addWidget(lbl);
+        enemyLabels.append(lbl);
+
+        // 每放一隻敵人，就放一個 stretch
+        enemyLayout->addStretch();
+    }
 }
 
-void GameStageWidget::onSettingClicked()
+////////////////////////////////////////////////////////////////////////////////
+// showBoard(): 從 Controller 拿到 6×5 個 Gem*，把盤面符石貼到 gemLabels2D 上
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::showBoard(const QVector<QVector<Gem*>> &board)
 {
-    if (isPaused) return;
-    pauseGame();
-    emit pauseRequested();
+    // 假設 gemLabels2D 已經先配好 6×5 個 QLabel，僅要設定 pixmap
+    for (int r = 0; r < board.size() && r < gemLabels2D.size(); ++r) {
+        for (int c = 0; c < board[r].size() && c < gemLabels2D[r].size(); ++c) {
+            Gem *g = board[r][c];
+            QLabel *lbl = gemLabels2D[r][c];
+            if (g && lbl) {
+                QPixmap pix(g->getIconPath());
+                lbl->setPixmap(pix.scaled(90,90, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                lbl->setVisible(true);
+            }
+            else {
+                // 如果該位置沒有 Gem，就保持背景色即可
+                lbl->setVisible(false);
+            }
+        }
+    }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// clearGemLabels(): 把盤面上所有 gemLabels2D 的 QLabel 先 delete 掉並清空
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::clearGemLabels()
+{
+    for (auto &row : gemLabels2D) {
+        for (QLabel *lbl : row) {
+            if (lbl) lbl->deleteLater();
+        }
+    }
+    gemLabels2D.clear();
+    gemLabels.clear();
+
+    if (gemLayout) {
+        QLayoutItem *child;
+        while ((child = gemLayout->takeAt(0)) != nullptr) {
+            if (QWidget *w = child->widget()) w->deleteLater();
+            delete child;
+        }
+    }
+
+    // 重新建立 6×5 個「黑底空框」作為 placeholder
+    // 這段也可以留到 setupUI() 但為保證每次切波時都重置，就放在這邊
+    for (int r = 0; r < GameController::ROWS; ++r) {
+        QVector<QLabel*> row;
+        for (int c = 0; c < GameController::COLS; ++c) {
+            QLabel *lbl = new QLabel(this);
+            lbl->setFixedSize(90, 90);
+            lbl->setStyleSheet("background-color: #000000");
+            gemLayout->addWidget(lbl, r, c);
+            row.append(lbl);
+            gemLabels.append(lbl);
+        }
+        gemLabels2D.append(row);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// onMoveTimeUp(): Controller 倒數到 → UI 禁止滑動、進入消除判定
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::onMoveTimeUp()
+{
+    qDebug() << "[GameStageWidget] onMoveTimeUp()";
+    // TODO: 讓 UI 停止任何拖動；顯示「正在判定中」
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// onMatchesFound(): Controller 找到 matched coords → UI 執行消除動畫
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::onMatchesFound(const QList<QPair<int,int>> &matchedCoords,
+                                     int comboCount)
+{
+    qDebug() << "[GameStageWidget] onMatchesFound() combo =" << comboCount;
+    // matchedCoords 裡每個 pair 就是要消除的 (row,col)
+    // 這裡示意把對應 QLabel 設為 hidden
+    for (auto &p : matchedCoords) {
+        int r = p.first;
+        int c = p.second;
+        if (r >= 0 && r < gemLabels2D.size() &&
+            c >= 0 && c < gemLabels2D[r].size())
+        {
+            QLabel *lbl = gemLabels2D[r][c];
+            if (lbl) lbl->setVisible(false);
+        }
+    }
+    // 200ms 後再通知 Controller 真正刪除 board 資料
+    QTimer::singleShot(200, [this, matchedCoords]() {
+        emit clearGems(matchedCoords);
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// onDealDamage(): Controller 回傳 totalDamage → UI 更新敵人血量、受傷動畫
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::onDealDamage(int totalDamage)
+{
+    qDebug() << "[GameStageWidget] onDealDamage() dmg =" << totalDamage;
+    // TODO: 更新畫面上每隻敵人的 HP (可自行寫受傷動畫)
+    QTimer::singleShot(200, [this]() {
+        emit enemiesAttacked();
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// onWaveCleared(): Controller 發射 waveCleared → UI 清空敵人＆盤面、等待下一波
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::onWaveCleared()
+{
+    qDebug() << "[GameStageWidget] onWaveCleared()";
+    // (1) 清空敵人
+    for (QLabel *lbl : enemyLabels) {
+        if (lbl) lbl->deleteLater();
+    }
+    enemyLabels.clear();
+
+    QLayout *lyt = enemyArea->layout();
+    if (lyt) {
+        QLayoutItem *child;
+        while ((child = lyt->takeAt(0)) != nullptr) {
+            if (QWidget *w = child->widget()) w->deleteLater();
+            delete child;
+        }
+    }
+
+    // (2) 清空盤面
+    clearGemLabels();
+
+    // 下一步將由 Controller 重新 generateInitialGems() → MainWindow 會 call showBoard()/showEnemies()
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// 模擬勝利 / 模擬失敗：直接發出 gameOver()
+////////////////////////////////////////////////////////////////////////////////
 void GameStageWidget::onFakeWinButtonClicked()
 {
     emit gameOver(true);
@@ -441,3 +336,140 @@ void GameStageWidget::onFakeLoseButtonClicked()
 {
     emit gameOver(false);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// 設定按鈕：發出 pauseRequested()
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::onSettingClicked()
+{
+    emit pauseRequested();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// 暫停遊戲：暫時停掉任何互動或動畫
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::pauseGame()
+{
+    qDebug() << "[GameStageWidget] pauseGame()";
+    isPaused = true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// 恢復遊戲：重新允許互動或動畫
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::resumeGame()
+{
+    qDebug() << "[GameStageWidget] resumeGame()";
+    isPaused = false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// setupUI(): 建立「敵人區／設定按鈕／模擬按鈕／角色區／符石區」的佈局
+////////////////////////////////////////////////////////////////////////////////
+void GameStageWidget::setupUI()
+{
+    // 主垂直佈局 (總高 540×960)
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    // ─────── 1. 敵人區 ───────────────────────────────────
+        enemyArea = new QWidget(this);
+        enemyArea->setFixedSize(540, 410);
+        enemyArea->setStyleSheet("background-color: #EFEFEF;");
+
+        // 建立一個水平佈局，所有敵人 QLabel 都會放到這裡
+        enemyLayout = new QHBoxLayout(enemyArea);
+        enemyLayout->setContentsMargins(10,10,10,10);
+        enemyLayout->setSpacing(20);
+
+        // 把 enemyArea 加到主畫面（靠上方）
+        mainLayout->addWidget(enemyArea);
+
+    // 設定按鈕 (齒輪)：大小 30×30，絕對定位到右上 (500,10)
+    settingButton = new QPushButton(enemyArea);
+    settingButton->setIcon(QIcon(":/icons/setting.png")); // 你自己準備齒輪 icon
+    settingButton->setIconSize(QSize(24,24));
+    settingButton->setFixedSize(30,30);
+    settingButton->move(500, 10);
+    settingButton->raise();
+    connect(settingButton, &QPushButton::clicked,
+            this, &GameStageWidget::onSettingClicked);
+
+    mainLayout->addWidget(enemyArea);
+
+    // ------------------------------------------------------------------------
+    // (2) 模擬勝利 / 模擬失敗 / 下一波 按鈕
+    // ------------------------------------------------------------------------
+    QWidget *buttonArea = new QWidget(this);
+    buttonArea->setFixedHeight(50);
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout(buttonArea);
+    buttonLayout->setContentsMargins(10, 5, 10, 5);
+    buttonLayout->setSpacing(20);
+
+    fakeWinBtn       = new QPushButton(tr("Sim Win"), buttonArea);
+    fakeLoseBtn      = new QPushButton(tr("Sim Lose"), buttonArea);
+    nextBattleButton = new QPushButton(tr("Next Battle"), buttonArea);
+
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(fakeWinBtn);
+    buttonLayout->addWidget(fakeLoseBtn);
+    buttonLayout->addWidget(nextBattleButton);
+    buttonLayout->addStretch();
+
+    connect(fakeWinBtn, &QPushButton::clicked,
+            this, &GameStageWidget::onFakeWinButtonClicked);
+    connect(fakeLoseBtn, &QPushButton::clicked,
+            this, &GameStageWidget::onFakeLoseButtonClicked);
+    connect(nextBattleButton, &QPushButton::clicked,
+            this, &GameStageWidget::onWaveCleared);
+
+    mainLayout->addWidget(buttonArea);
+
+    // ------------------------------------------------------------------------
+    // (3) 角色區 (6 個灰底格子，後續 initGame() 會貼圖)
+    // ------------------------------------------------------------------------
+    QWidget *charArea = new QWidget(this);
+    charArea->setFixedHeight(80);
+
+    charLayout = new QGridLayout(charArea);
+    charLayout->setContentsMargins(5, 5, 5, 5);
+    charLayout->setSpacing(10);
+
+    for (int i = 0; i < 6; ++i) {
+        QLabel *lbl = new QLabel(charArea);
+        lbl->setFixedSize(80, 80);
+        lbl->setStyleSheet("background-color: #555555"); // 預設灰底
+        charLayout->addWidget(lbl, 0, i);
+        charLabels.append(lbl);
+    }
+
+    mainLayout->addWidget(charArea);
+
+    // ------------------------------------------------------------------------
+    // (4) 符石區 (6×5，每格 90×90，初始黑底)
+    // ------------------------------------------------------------------------
+    QWidget *gemContainer = new QWidget(this);
+    gemContainer->setFixedSize(540, 450);
+
+    gemLayout = new QGridLayout(gemContainer);
+    gemLayout->setContentsMargins(0, 0, 0, 0);
+    gemLayout->setSpacing(2);
+
+    for (int r = 0; r < GameController::ROWS; ++r) {
+        QVector<QLabel*> row;
+        for (int c = 0; c < GameController::COLS; ++c) {
+            QLabel *lbl = new QLabel(gemContainer);
+            lbl->setFixedSize(80,80);
+            lbl->setStyleSheet("background-color: #EFEFEF"); // 初始黑底
+            gemLayout->addWidget(lbl, r, c);
+            row.append(lbl);
+            gemLabels.append(lbl);
+        }
+        gemLabels2D.append(row);
+    }
+
+    mainLayout->addWidget(gemContainer);
+}
+

@@ -12,7 +12,9 @@ SOURCES += \
     Character.cpp \
     Enemy.cpp \
     FinishStageWidget.cpp \
+    GameController.cpp \
     GameStageWidget.cpp \
+    Gem.cpp \
     PauseWidget.cpp \
     PrepareStageWidget.cpp \
     main.cpp \
@@ -22,7 +24,9 @@ HEADERS += \
     Character.h \
     Enemy.h \
     FinishStageWidget.h \
+    GameController.h \
     GameStageWidget.h \
+    Gem.h \
     PauseWidget.h \
     PrepareStageWidget.h \
     MainWindow.h

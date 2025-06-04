@@ -1,26 +1,14 @@
+// GameStageWidget.h
 #pragma once
 
 #include <QWidget>
-#include <QPushButton>
-#include <QLabel>
-#include <QGridLayout>
 #include <QVector>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
-#include "Character.h"
+#include <QPair>
+#include <QLabel>
+#include <QPushButton>
+#include <QGridLayout>
+#include "Gem.h"
 #include "Enemy.h"
-
-/*
- * GameStageWidget
- *  - 寬 540 × 高 960
- *  - 上方 540×410 是敵人區
- *  - 中間 540×100 是玩家區 (固定 6 個槽位)
- *  - 下方 540×450 是符石區
- *  - 玩家區每個槽位要麼顯示角色圖，要麼顯示灰底留空
- *  - ⚙ 設定按鈕用絕對定位固定在右上
- */
-
-class RunestoneWidget;
 
 class GameStageWidget : public QWidget
 {
@@ -29,62 +17,78 @@ class GameStageWidget : public QWidget
 public:
     explicit GameStageWidget(QWidget *parent = nullptr);
 
-    // 由 MainWindow 傳入：長度為 6 的向量，空位用 0 表示
+    // 從 Prepare 階段傳來：6 格角色 ID (0 表示空格)
     void setSelectedCharacters(const QVector<int> &chars);
     void setMissionID(int mission);
 
-    // 初始化遊戲：建立角色 & 敵人，並顯示
-    void initGame();
-    // 重置：刪掉舊的角色、敵人、waves
+    // 初始化與重置：MainWindow 在每次切到遊戲畫面時都要呼叫
     void resetGame();
+    void initGame();
 
+    // UI 暫停／恢復
     void pauseGame();
     void resumeGame();
 
+    // 顯示敵人、顯示盤面符石
+    void showEnemies(const QVector<Enemy*> &enemies);
+    void showBoard(const QVector<QVector<Gem*>> &board);
+
+    // 清除盤面上的所有 gem QLabel
+    void clearGemLabels();
+
 signals:
+    // 遊戲結束（true：玩家勝，false：玩家敗）
     void gameOver(bool playerWon);
+
+    // 玩家按下左上角設定，此信號由 MainWindow 接去 Pause 畫面
     void pauseRequested();
+
+    // UI → Controller
+    void swapFinished();
+    void clearGems(const QList<QPair<int,int>> &matchedCoords);
+    void enemiesAttacked();
+
+public slots:
+    // Controller → UI
+    void onMoveTimeUp();
+    void onMatchesFound(const QList<QPair<int,int>> &matchedCoords, int comboCount);
+    void onDealDamage(int totalDamage);
+    void onWaveCleared();
 
 private slots:
     void onSettingClicked();
     void onFakeWinButtonClicked();
     void onFakeLoseButtonClicked();
-    void onNextBattleClicked();
 
 private:
     void setupUI();
-    void loadCurrentWave();
 
-    // ===== UI Components =====
-    QWidget              *enemyArea;        // 敵人區 (540×410)
-    QWidget              *playerArea;       // 玩家區 (540×100)
-    QWidget              *runestoneArea;    // 符石區 (540×450)
+    // ===== UI 成員變數 =====
+    // (1) 敵人區
+    QWidget                  *enemyArea;
+    QVector<QLabel*>          enemyLabels;
+    QHBoxLayout *enemyLayout;    // 放 QLabel（敵人圖示）的水平佈局
 
-    // 符石區
-    QGridLayout          *gemLayout;
-    QVector<RunestoneWidget*> gems;
+    // (2) 按鈕：模擬勝利／模擬失敗／下一波
+    QPushButton              *fakeWinBtn;
+    QPushButton              *fakeLoseBtn;
+    QPushButton              *nextBattleButton;
 
-    // 玩家區：水平排列 6 個槽
-    QHBoxLayout          *charLayout;
+    // (3) 左上角設定按鈕
+    QPushButton              *settingButton;
 
-    // 敵人區：waveLayout + 按鈕
-    QVBoxLayout          *enemyLayout;
-    QHBoxLayout          *waveLayout;
+    // (4) 符石區：6×5 格
+    QGridLayout              *gemLayout;
+    QVector<QLabel*>          gemLabels;     // 平鋪所有 QLabel* for iteration
+    QVector<QVector<QLabel*>>  gemLabels2D;   // 二維陣列 [row][col]
 
-    // 按鈕
-    QPushButton          *nextBattleButton;
-    QPushButton          *fakeWinBtn;
-    QPushButton          *fakeLoseBtn;
-    QPushButton          *settingButton;   // 絕對定位在右上
+    // (5) 角色區：6 格
+    QGridLayout              *charLayout;
+    QVector<QLabel*>          charLabels;    // 6 個 QLabel
 
-    bool                  isPaused;
-
-    // ===== 遊戲邏輯資料 =====
-    QVector<int>          selectedChars;   // 一定長度 6，0 = 空位
-    int                   missionID;
-    QVector<Character*>   playerChars;     // 會儲存新建的 Character* (如果 slot = 0 就不 new)
-
-    QVector<QVector<Enemy*>> waves;        // 三波敵人
-    int                     currentWaveIndex;
-    QVector<Enemy*>         enemies;       // 當前波的 Enemy*
+    // 狀態、資料
+    bool                      isPaused;
+    QVector<int>              selectedChars; // 從 Prepare 拿到的 6 個 ID
+    int                       missionID;
 };
+
