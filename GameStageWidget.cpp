@@ -388,6 +388,8 @@ void GameStageWidget::loadCurrentWave()
 
     // (5) 顯示「通過該 Battle」按鈕
     nextBattleButton->setVisible(true);
+    fakeWinBtn->setVisible(true);
+    fakeLoseBtn->setVisible(true);
 }
 
 void GameStageWidget::onNextBattleClicked()
