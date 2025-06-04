@@ -248,51 +248,103 @@ void GameStageWidget::initGame()
 
 void GameStageWidget::resetGame()
 {
-    isPaused = false;
+    qDebug() << "[resetGame] ----- Starting clean reset of GameStage -----";
 
-    // (1) 清空玩家區：刪掉 charLayout 裡所有 widget
+    // 1. Unpause the game
+    isPaused = false;
+    qDebug() << "[resetGame] isPaused set to false";
+
+    // 2. Clear out the player area (charLayout) and delete all Character* in playerChars
+    qDebug() << "[resetGame] Clearing player area (charLayout)...";
     {
-        QLayoutItem *child;
+        QLayoutItem *child = nullptr;
         while ((child = charLayout->takeAt(0)) != nullptr) {
             if (QWidget *w = child->widget()) {
+                qDebug() << "[resetGame]   Deleting player QLabel (pointer):" << w;
                 w->deleteLater();
             }
             delete child;
         }
+        qDebug() << "[resetGame] charLayout items cleared";
     }
-    // 刪除 playerChars 中所有 Character*
-    for (Character *c : playerChars) {
-        delete c;
-    }
-    playerChars.clear();
 
-    // (2) 刪除當前波 enemies
-    for (Enemy *e : enemies) {
-        delete e;
-    }
-    enemies.clear();
-
-    // (3) 刪除 waves 中所有 Enemy*，並清空 waves
-    for (auto &wv : waves) {
-        for (Enemy *e : wv) {
-            delete e;
+    if (!playerChars.isEmpty()) {
+        qDebug() << "[resetGame] Deleting" << playerChars.size() << "Character* in playerChars...";
+        for (Character *c : playerChars) {
+            if (c) {
+                qDebug() << "[resetGame]   Deleting Character* (pointer):" << c;
+                delete c;
+            } else {
+                qDebug() << "[resetGame]   Skipping nullptr Character*";
+            }
         }
+        playerChars.clear();
+        qDebug() << "[resetGame] playerChars cleared";
+    } else {
+        qDebug() << "[resetGame] playerChars already empty";
     }
-    waves.clear();
 
-    // (4) 清空 waveLayout 裡所有子 widget
+    // 3. We assume loadCurrentWave() has already deleted any Enemy* from previous waves.
+    //    So here we only clear the vectors without deleting pointers again.
+    if (!enemies.isEmpty()) {
+        qDebug() << "[resetGame] Clearing enemies vector without deleting pointers (already freed by loadCurrentWave)";
+        enemies.clear();
+        qDebug() << "[resetGame] enemies cleared";
+    } else {
+        qDebug() << "[resetGame] enemies already empty";
+    }
+
+    if (!waves.isEmpty()) {
+        qDebug() << "[resetGame] Clearing waves vector without deleting pointers (already freed by loadCurrentWave)";
+        waves.clear();
+        qDebug() << "[resetGame] waves cleared";
+    } else {
+        qDebug() << "[resetGame] waves already empty";
+    }
+
+    // 4. Clear out waveLayout (remove any leftover QLabel for enemies)
+    qDebug() << "[resetGame] Clearing waveLayout widgets...";
     {
-        QLayoutItem *child;
+        QLayoutItem *child = nullptr;
         while ((child = waveLayout->takeAt(0)) != nullptr) {
             if (QWidget *w = child->widget()) {
+                qDebug() << "[resetGame]   Deleting waveLayout QLabel (pointer):" << w;
                 w->deleteLater();
             }
             delete child;
         }
+        qDebug() << "[resetGame] waveLayout items cleared";
     }
 
-    // (5) 隱藏「通過該 Battle」按鈕
-    nextBattleButton->setVisible(false);
+    // 5. Hide any battle‐related buttons to avoid leftover UI elements
+    if (nextBattleButton) {
+        qDebug() << "[resetGame] Hiding nextBattleButton";
+        nextBattleButton->setVisible(false);
+    }
+    if (fakeWinBtn) {
+        qDebug() << "[resetGame] Hiding fakeWinBtn";
+        fakeWinBtn->setVisible(false);
+    }
+    if (fakeLoseBtn) {
+        qDebug() << "[resetGame] Hiding fakeLoseBtn";
+        fakeLoseBtn->setVisible(false);
+    }
+/*
+    // 6. Stop any active timers (e.g., fallTimer, swapTimer) to prevent callbacks to deleted widgets
+    if (fallTimer && fallTimer->isActive()) {
+        qDebug() << "[resetGame] Stopping fallTimer";
+        fallTimer->stop();
+    }
+    if (swapTimer && swapTimer->isActive()) {
+        qDebug() << "[resetGame] Stopping swapTimer";
+        swapTimer->stop();
+    }
+*/
+    // 7. Reset wave index so next game starts from wave 0
+    qDebug() << "[resetGame] Resetting currentWaveIndex from" << currentWaveIndex << "to 0";
+    currentWaveIndex = 0;
+
+    qDebug() << "[resetGame] ----- resetGame() complete -----";
 }
 
 void GameStageWidget::loadCurrentWave()
@@ -344,6 +396,7 @@ void GameStageWidget::onNextBattleClicked()
     if (currentWaveIndex >= waves.size()) {
         emit gameOver(true);
     } else {
+
         // 清掉 waveLayout 的 QLabel
         {
             QLayoutItem *child;
