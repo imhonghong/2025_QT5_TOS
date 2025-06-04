@@ -17,7 +17,7 @@ public:
     ~MainWindow();
 
 private slots:
-    // 因為 PrepareStageWidget 現在傳入 selectedChars 與 missionID
+    // 由 Prepare 傳來角色列表與 missionID
     void gotoGameStage(const QVector<int> &selectedChars, int missionID);
 
     void gotoFinishStage(bool playerWon);
@@ -27,10 +27,10 @@ private slots:
     void restartGame();
 
 private:
-    QStackedWidget *stack;
+    QStackedWidget      *stack;
 
-    PrepareStageWidget *prepareWidget;
-    GameStageWidget    *gameWidget;
-    PauseWidget        *pauseWidget;
-    FinishStageWidget  *finishWidget;
+    PrepareStageWidget  *prepareWidget;
+    GameStageWidget     *gameWidget;
+    PauseWidget         *pauseWidget;
+    FinishStageWidget   *finishWidget;
 };
