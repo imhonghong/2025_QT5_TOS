@@ -90,6 +90,6 @@ void MainWindow::surrenderFromPause()
 // (F) Finish → Restart → Prepare
 void MainWindow::restartGame()
 {
-    stack->setCurrentIndex(0);
     gameWidget->resetGame();
+    stack->setCurrentIndex(0);
 }
