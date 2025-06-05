@@ -7,6 +7,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QGridLayout>
+#include <QProgressBar>
+#include <QTimer>
 #include "Gem.h"
 #include "Enemy.h"
 
@@ -36,6 +38,15 @@ public:
     // 清除盤面上的所有 gem QLabel
     void clearGemLabels();
 
+    // 在一般遊戲中，用來設定「當前血量／最高血量」
+    void setHealth(int currentHP, int maxHP);
+
+    // 進入「轉珠倒數」模式，傳入剩餘秒數(倒數秒數由右向左消失)
+    void startCountdown(int seconds);
+
+    // 停止倒數，恢復成顯示血量的模式 (或直接隱藏)
+    void stopCountdown();
+
 signals:
     // 遊戲結束（true：玩家勝，false：玩家敗）
     void gameOver(bool playerWon);
@@ -59,6 +70,8 @@ private slots:
     void onSettingClicked();
     void onFakeWinButtonClicked();
     void onFakeLoseButtonClicked();
+    // 倒數計時器每秒觸發，用來更新進度顯示
+    void onCountdownTimeout();
 
 private:
     void setupUI();
@@ -77,18 +90,24 @@ private:
     // (3) 左上角設定按鈕
     QPushButton              *settingButton;
 
-    // (4) 符石區：6×5 格
-    QGridLayout              *gemLayout;
-    QVector<QLabel*>          gemLabels;     // 平鋪所有 QLabel* for iteration
-    QVector<QVector<QLabel*>>  gemLabels2D;   // 二維陣列 [row][col]
+    // (4) status bar
+    QProgressBar              *statusBar;       // 顯示血量或倒數進度的條
+    bool                       inCountdownMode; // false = 顯示血量模式；true = 倒數模式
+    int                        countdownRemain; // 倒數剩餘秒數
+    QTimer                    *countdownTimer;  // 每秒觸發 onCountdownTimeout()
 
     // (5) 角色區：6 格
     QGridLayout              *charLayout;
     QVector<QLabel*>          charLabels;    // 6 個 QLabel
+
+
+    // (6) 符石區：6×5 格
+    QGridLayout              *gemLayout;
+    QVector<QLabel*>          gemLabels;     // 平鋪所有 QLabel* for iteration
+    QVector<QVector<QLabel*>>  gemLabels2D;   // 二維陣列 [row][col]
 
     // 狀態、資料
     bool                      isPaused;
     QVector<int>              selectedChars; // 從 Prepare 拿到的 6 個 ID
     int                       missionID;
 };
-
