@@ -374,17 +374,17 @@ void GameStageWidget::setupUI()
     mainLayout->setSpacing(0);
 
     // ─────── 1. 敵人區 ───────────────────────────────────
-        enemyArea = new QWidget(this);
-        enemyArea->setFixedSize(540, 410);
-        enemyArea->setStyleSheet("background-color: #EFEFEF;");
+    enemyArea = new QWidget(this);
+    enemyArea->setFixedSize(540, 390);
+    enemyArea->setStyleSheet("background-color: #EFEFEF;");
 
-        // 建立一個水平佈局，所有敵人 QLabel 都會放到這裡
-        enemyLayout = new QHBoxLayout(enemyArea);
-        enemyLayout->setContentsMargins(10,10,10,10);
-        enemyLayout->setSpacing(20);
+    // 建立一個水平佈局，所有敵人 QLabel 都會放到這裡
+    enemyLayout = new QHBoxLayout(enemyArea);
+    enemyLayout->setContentsMargins(10,10,10,10);
+    enemyLayout->setSpacing(20);
 
-        // 把 enemyArea 加到主畫面（靠上方）
-        mainLayout->addWidget(enemyArea);
+    // 把 enemyArea 加到主畫面（靠上方）
+    mainLayout->addWidget(enemyArea);
 
     // 設定按鈕 (齒輪)：大小 30×30，絕對定位到右上 (500,10)
     settingButton = new QPushButton(enemyArea);
@@ -427,6 +427,32 @@ void GameStageWidget::setupUI()
 
     mainLayout->addWidget(buttonArea);
 
+    statusBar = new QProgressBar(this);
+    statusBar->setFixedSize(530, 20);
+    statusBar->setAlignment(Qt::AlignCenter);
+    statusBar->setStyleSheet(
+        "QProgressBar {"
+        "  background-color: #8B4513;"    // 棕色
+        "  border: 1px solid #000000;"
+        "}"
+        "QProgressBar::chunk {"
+        "  background-color: #FF69B4;"    // 粉紅
+        "}"
+    );
+    statusBar->setRange(0, 100);
+    statusBar->setValue(70);
+
+    // 外層用一個 QWidget 再搭 QHBoxLayout 置中
+    QWidget *statusContainer = new QWidget(this);
+    statusContainer->setFixedHeight(30);
+    QHBoxLayout *hbox = new QHBoxLayout(statusContainer);
+    hbox->setContentsMargins(0,0,0,0);
+    hbox->addStretch();
+    hbox->addWidget(statusBar);
+    hbox->addStretch();
+    mainLayout->addWidget(statusContainer);
+
+
     // ------------------------------------------------------------------------
     // (3) 角色區 (6 個灰底格子，後續 initGame() 會貼圖)
     // ------------------------------------------------------------------------
@@ -462,7 +488,7 @@ void GameStageWidget::setupUI()
         for (int c = 0; c < GameController::COLS; ++c) {
             QLabel *lbl = new QLabel(gemContainer);
             lbl->setFixedSize(80,80);
-            lbl->setStyleSheet("background-color: #EFEFEF"); // 初始黑底
+            lbl->setStyleSheet("background-color: #000000"); // 初始黑底
             gemLayout->addWidget(lbl, r, c);
             row.append(lbl);
             gemLabels.append(lbl);
@@ -472,4 +498,3 @@ void GameStageWidget::setupUI()
 
     mainLayout->addWidget(gemContainer);
 }
-
